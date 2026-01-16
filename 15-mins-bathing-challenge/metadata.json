@@ -1,0 +1,7 @@
+{
+  "name": "15 Mins Bathing Challenge",
+  "description": "A fun app to reduce bathing time by playing your own recording if you stay in the shower for more than 15 minutes.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
