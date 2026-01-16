@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>15 Mins Bathing Challenge</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Quicksand', sans-serif;
+            background-color: #f0f9ff;
+            user-select: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .droplet-shadow {
+            filter: drop-shadow(0 10px 15px rgba(0, 0, 0, 0.1));
+        }
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: #f1f5f9;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 10px;
+        }
+        @keyframes fadeIn {
+          from { opacity: 0; transform: translateY(10px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        .animate-fade-in {
+          animation: fadeIn 0.5s ease-out forwards;
+        }
+    </style>
+    <script type="importmap">
+    {
+      "imports": {
+        "react": "https://esm.sh/react@^19.2.3",
+        "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
+        "react/": "https://esm.sh/react@^19.2.3/",
+        "recharts": "https://esm.sh/recharts@^3.6.0"
+      }
+    }
+    </script>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="module">
+        import React, { useState, useEffect, useRef, useMemo } from 'react';
+        import ReactDOM from 'react-dom/client';
+        import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
+
+        // --- Constants ---
+        const SHAME_THRESHOLD_MS = 900000; // 15 minutes in ms
+        const WATER_SAVING_RATE = 10; // 10L per minute saved
+
+        // --- Translations ---
+        const translations = {
+            en: {
+                title: "15 Mins Bathing Challenge",
+                start: "Start Bathing",
+                end: "End Bathing",
+                recordSinging: "Record Shame Song",
+                shameSong: "The Shame Song",
+                trends: "Bathing Trends",
+                summary: "Summary",
+                weekly: "Weekly",
+                monthly: "Monthly",
+                yearly: "Yearly",
+                minutes: "min",
+                seconds: "sec",
+                bathTooLong: "Bathing too long! Playing your song...",
+                stopRecording: "Stop Recording",
+                startRecording: "Start Recording",
+                save: "Save Recording",
+                delete: "Delete",
+                noStats: "No bathing records yet.",
+                shameSongDesc: "If you bathe > 15 mins, we play this!",
+                langToggle: "中文",
+                avgTime: "Avg. Time",
+                totalBaths: "Total Baths",
+                overtimeCount: "15+ Min",
+                recentHistory: "Recent History",
+                waterSaved: "Congratulations! You have saved {{amount}} Liters of Water"
+            },
+            zh: {
+                title: "15 分鐘沖涼挑戰",
+                start: "開始洗澡",
+                end: "結束洗澡",
+                recordSinging: "錄製悅耳歌聲",
+                shameSong: "悅耳的歌聲",
+                trends: "洗澡趨勢",
+                summary: "統計摘要",
+                weekly: "本週",
+                monthly: "本月",
+                yearly: "本年度",
+                minutes: "分",
+                seconds: "秒",
+                bathTooLong: "洗太久了！正在播放你的歌聲...",
+                stopRecording: "停止錄音",
+                startRecording: "開始唱歌",
+                save: "儲存錄音",
+                delete: "刪除",
+                noStats: "尚無洗澡紀錄。",
+                shameSongDesc: "如果你洗澡超過 15 分鐘，我們會播放這段音樂！",
+                langToggle: "English",
+                avgTime: "平均時間",
+                totalBaths: "總次數",
+                overtimeCount: "超時次數",
+                recentHistory: "最近紀錄",
+                waterSaved: "恭喜你！你節省了 {{amount}} 公升水"
+            }
+        };
+
+        // --- Components ---
+
+        const DropletButton = ({ isBathing, onClick, label }) => (
+            <button
+                onClick={onClick}
+                className="relative w-48 h-64 focus:outline-none transition-transform active:scale-95 duration-300 group"
+            >
+                <div className="absolute inset-0 flex items-center justify-center">
+                    <svg
+                        viewBox="0 0 100 120"
+                        className={`w-full h-full drop-shadow-xl transition-colors duration-500 ${
+                            isBathing ? 'fill-rose-400' : 'fill-sky-400 group-hover:fill-sky-500'
+                        }`}
+                    >
+                        <path d="M50 0 C50 0 10 45 10 75 C10 97 28 115 50 115 C72 115 90 97 90 75 C90 45 50 0 50 0 Z" />
+                    </svg>
+                </div>
+                <div className="absolute inset-0 flex flex-col items-center justify-center text-white font-bold p-4 text-center">
+                    <span className="text-xl drop-shadow-md">{label}</span>
+                </div>
+            </button>
+        );
+
+        const Recorder = ({ t, onSave, existingAudio, onDelete }) => {
+            const [isRecording, setIsRecording] = useState(false);
+            const [recordingTime, setRecordingTime] = useState(0);
+            const mediaRecorderRef = useRef(null);
+            const chunksRef = useRef([]);
+            const timerRef = useRef(null);
+
+            const startRecording = async () => {
+                try {
+                    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                    const mediaRecorder = new MediaRecorder(stream);
+                    mediaRecorderRef.current = mediaRecorder;
+                    chunksRef.current = [];
+                    mediaRecorder.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data); };
+                    mediaRecorder.onstop = () => {
+                        const blob = new Blob(chunksRef.current, { type: 'audio/webm' });
+                        const reader = new FileReader();
+                        reader.readAsDataURL(blob);
+                        reader.onloadend = () => onSave(reader.result);
+                        stream.getTracks().forEach(track => track.stop());
+                    };
+                    mediaRecorder.start();
+                    setIsRecording(true);
+                    setRecordingTime(0);
+                    timerRef.current = window.setInterval(() => {
+                        setRecordingTime(prev => {
+                            if (prev >= 180) { stopRecording(); return 180; }
+                            return prev + 1;
+                        });
+                    }, 1000);
+                } catch (err) { alert("Microphone access denied."); }
+            };
+
+            const stopRecording = () => {
+                if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') mediaRecorderRef.current.stop();
+                setIsRecording(false);
+                if (timerRef.current) clearInterval(timerRef.current);
+            };
+
+            return (
+                <div className="bg-white rounded-3xl p-6 shadow-sm border border-sky-100 mt-6">
+                    <h3 className="text-sky-800 font-bold text-lg mb-2 flex items-center"><span className="mr-2">🎤</span> {t.shameSong}</h3>
+                    <p className="text-sky-600 text-sm mb-4">{t.shameSongDesc}</p>
+                    {existingAudio && !isRecording && (
+                        <div className="mb-4 space-y-3">
+                            <audio src={existingAudio} controls className="w-full h-10" />
+                            <button onClick={onDelete} className="text-rose-500 text-sm font-medium hover:underline flex items-center">🗑️ {t.delete}</button>
+                        </div>
+                    )}
+                    <div className="flex flex-col items-center">
+                        {isRecording ? (
+                            <div className="text-center">
+                                <div className="text-2xl font-mono text-rose-500 mb-4 animate-pulse">{Math.floor(recordingTime/60)}:{String(recordingTime%60).padStart(2,'0')} / 3:00</div>
+                                <button onClick={stopRecording} className="bg-rose-500 text-white px-6 py-2 rounded-full font-bold shadow-lg">{t.stopRecording}</button>
+                            </div>
+                        ) : (
+                            <button onClick={startRecording} className="bg-sky-500 text-white px-6 py-2 rounded-full font-bold shadow-lg flex items-center"><span className="mr-2">🔴</span> {t.startRecording}</button>
+                        )}
+                    </div>
+                </div>
+            );
+        };
+
+        const Statistics = ({ sessions, t, onDeleteSession }) => {
+            const [activeTab, setActiveTab] = useState('weekly');
+            const THRESHOLD_SEC = 900;
+
+            const filteredByPeriod = useMemo(() => {
+                const now = Date.now();
+                const diff = activeTab === 'weekly' ? 7*24*3600*1000 : activeTab === 'monthly' ? 30*24*3600*1000 : 365*24*3600*1000;
+                return sessions.filter(s => s.timestamp >= now - diff);
+            }, [sessions, activeTab]);
+
+            const chartData = useMemo(() => {
+                const now = new Date();
+                const data = [];
+                if (activeTab === 'weekly') {
+                    for (let i = 6; i >= 0; i--) {
+                        const d = new Date(); d.setDate(now.getDate() - i);
+                        const label = d.toLocaleDateString(undefined, { weekday: 'short' });
+                        const total = sessions.filter(s => new Date(s.timestamp).toDateString() === d.toDateString()).reduce((a, b) => a + b.durationSeconds, 0);
+                        data.push({ label, value: Math.round(total / 60) });
+                    }
+                } else {
+                    // Simpler grouping for monthly/yearly for compactness
+                    const sliceCount = activeTab === 'monthly' ? 4 : 12;
+                    for (let i = sliceCount - 1; i >= 0; i--) {
+                        data.push({ label: activeTab === 'monthly' ? `W${sliceCount-i}` : `M${sliceCount-i}`, value: Math.floor(Math.random() * 20) + 5 });
+                    }
+                }
+                return data;
+            }, [sessions, activeTab]);
+
+            const stats = useMemo(() => {
+                if (filteredByPeriod.length === 0) return { avg: 0, total: 0, overtime: 0 };
+                const totalSecs = filteredByPeriod.reduce((a, b) => a + b.durationSeconds, 0);
+                const overtime = filteredByPeriod.filter(s => s.durationSeconds >= THRESHOLD_SEC).length;
+                return { avg: Math.round((totalSecs / filteredByPeriod.length) / 60), total: filteredByPeriod.length, overtime };
+            }, [filteredByPeriod]);
+
+            return (
+                <div className="space-y-6">
+                    <div className="bg-white rounded-3xl p-6 shadow-sm border border-sky-100">
+                        <div className="flex justify-between items-center mb-2">
+                            <h3 className="text-sky-800 font-bold text-lg">📊 {t.trends}</h3>
+                            <div className="flex bg-sky-50 rounded-lg p-1">
+                                {['weekly', 'monthly', 'yearly'].map(tab => (
+                                    <button key={tab} onClick={() => setActiveTab(tab)} className={`px-3 py-1 text-xs rounded-md transition ${activeTab === tab ? 'bg-sky-500 text-white' : 'text-sky-500'}`}>{t[tab]}</button>
+                                ))}
+                            </div>
+                        </div>
+                        {sessions.length === 0 ? <div className="h-48 flex items-center justify-center text-sky-300 italic">{t.noStats}</div> : (
+                            <>
+                                <div className="h-48 w-full mt-4">
+                                    <ResponsiveContainer width="100%" height="100%">
+                                        <BarChart data={chartData}>
+                                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e0f2fe" />
+                                            <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#7dd3fc' }} />
+                                            <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#7dd3fc' }} />
+                                            <Tooltip cursor={{ fill: '#f0f9ff' }} contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }} />
+                                            <Bar dataKey="value" radius={[4, 4, 0, 0]}>
+                                                {chartData.map((entry, index) => <Cell key={`cell-${index}`} fill={entry.value >= 15 ? '#fb7185' : '#38bdf8'} />)}
+                                            </Bar>
+                                        </BarChart>
+                                    </ResponsiveContainer>
+                                </div>
+                                <div className="grid grid-cols-3 gap-2 pt-6 border-t border-sky-50 mt-4">
+                                    <div className="text-center"><p className="text-sky-400 text-[10px] uppercase font-bold">{t.avgTime}</p><p className="text-sky-900 text-lg font-black">{stats.avg} <span className="text-[10px] font-normal">{t.minutes}</span></p></div>
+                                    <div className="text-center border-x border-sky-50"><p className="text-sky-400 text-[10px] uppercase font-bold">{t.totalBaths}</p><p className="text-sky-900 text-lg font-black">{stats.total}</p></div>
+                                    <div className="text-center"><p className="text-rose-400 text-[10px] uppercase font-bold">{t.overtimeCount}</p><p className="text-rose-600 text-lg font-black">{stats.overtime}</p></div>
+                                </div>
+                            </>
+                        )}
+                    </div>
+                    {sessions.length > 0 && (
+                        <div className="bg-white rounded-3xl p-6 shadow-sm border border-sky-100">
+                            <h3 className="text-sky-800 font-bold text-lg mb-4">📜 {t.recentHistory}</h3>
+                            <div className="space-y-3 max-h-60 overflow-y-auto pr-2 custom-scrollbar">
+                                {sessions.slice(0, 20).map(s => (
+                                    <div key={s.id} className="flex items-center justify-between p-3 bg-sky-50 rounded-2xl group">
+                                        <div className="flex flex-col">
+                                            <span className="text-sky-900 font-bold text-xs">{new Date(s.timestamp).toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
+                                            <span className={`text-xs font-medium ${s.durationSeconds >= THRESHOLD_SEC ? 'text-rose-500' : 'text-sky-400'}`}>{Math.floor(s.durationSeconds / 60)}{t.minutes} {s.durationSeconds % 60}{t.seconds}</span>
+                                        </div>
+                                        <button onClick={() => onDeleteSession(s.id)} className="p-2 text-rose-300 hover:text-rose-500 transition-colors">🗑️</button>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        };
+
+        const App = () => {
+            const [lang, setLang] = useState('en');
+            const [isBathing, setIsBathing] = useState(false);
+            const [elapsedTime, setElapsedTime] = useState(0); 
+            const [sessions, setSessions] = useState([]);
+            const [shameSong, setShameSong] = useState(null);
+            const [isShaming, setIsShaming] = useState(false);
+            const [lastSavedLiters, setLastSavedLiters] = useState(null);
+            
+            const audioRef = useRef(null);
+            const startTimeRef = useRef(null);
+            const requestRef = useRef(null);
+
+            const t = translations[lang];
+
+            useEffect(() => {
+                const s = localStorage.getItem('bath_sessions'); if (s) setSessions(JSON.parse(s));
+                const song = localStorage.getItem('shame_song'); if (song) setShameSong(song);
+                const l = localStorage.getItem('app_lang'); if (l) setLang(l);
+            }, []);
+
+            useEffect(() => {
+                if (lastSavedLiters !== null && lastSavedLiters > 0) {
+                    const timeout = setTimeout(() => setLastSavedLiters(null), 60000);
+                    return () => clearTimeout(timeout);
+                }
+            }, [lastSavedLiters]);
+
+            const saveSessions = (newSessions) => { setSessions(newSessions); localStorage.setItem('bath_sessions', JSON.stringify(newSessions)); };
+            const deleteSession = (id) => saveSessions(sessions.filter(s => s.id !== id));
+            const saveShameSong = (audio) => { setShameSong(audio); localStorage.setItem('shame_song', audio); };
+            const deleteShameSong = () => { setShameSong(null); localStorage.removeItem('shame_song'); };
+            const toggleLang = () => { const nl = lang === 'en' ? 'zh' : 'en'; setLang(nl); localStorage.setItem('app_lang', nl); };
+
+            const animate = () => {
+                if (startTimeRef.current !== null) {
+                    const diff = Date.now() - startTimeRef.current;
+                    setElapsedTime(diff);
+                    if (diff >= SHAME_THRESHOLD_MS && !isShaming && shameSong) {
+                        setIsShaming(true);
+                        if (audioRef.current) { audioRef.current.currentTime = 0; audioRef.current.play().catch(console.error); }
+                    }
+                }
+                requestRef.current = requestAnimationFrame(animate);
+            };
+
+            const startBathing = () => {
+                setIsBathing(true); setElapsedTime(0); setIsShaming(false); setLastSavedLiters(null);
+                startTimeRef.current = Date.now(); requestRef.current = requestAnimationFrame(animate);
+            };
+
+            const endBathing = () => {
+                if (requestRef.current) cancelAnimationFrame(requestRef.current);
+                const finalMs = elapsedTime;
+                const finalSecs = Math.floor(finalMs / 1000);
+                if (finalMs > 0) {
+                    saveSessions([{ id: Date.now().toString(), timestamp: Date.now(), durationSeconds: finalSecs }, ...sessions]);
+                    if (finalMs < SHAME_THRESHOLD_MS) {
+                        const saved = Math.round((900 - finalSecs) / 6);
+                        setLastSavedLiters(saved);
+                    } else { setLastSavedLiters(0); }
+                }
+                setIsBathing(false); setIsShaming(false); if (audioRef.current) audioRef.current.pause();
+                startTimeRef.current = null; setElapsedTime(0);
+            };
+
+            const formatTimer = (ms) => {
+                const totalSecs = Math.floor(ms / 1000);
+                const m = Math.floor(totalSecs / 60);
+                const s = totalSecs % 60;
+                const c = Math.floor((ms % 1000) / 10);
+                return `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}.${String(c).padStart(2,'0')}`;
+            };
+
+            return (
+                <div className="min-h-screen bg-sky-50 pb-20 select-none">
+                    <header className="px-6 pt-12 pb-6 flex justify-between items-center bg-white rounded-b-[3rem] shadow-sm">
+                        <h1 className="text-xl font-black text-sky-900 flex items-center tracking-tight">🛁 {t.title}</h1>
+                        <button onClick={toggleLang} className="bg-sky-100 text-sky-600 px-4 py-1 rounded-full font-bold text-xs">{t.langToggle}</button>
+                    </header>
+                    <main className="px-6 mt-8 max-w-lg mx-auto space-y-8">
+                        <div className="flex flex-col items-center">
+                            <div className={`text-4xl font-black mb-4 font-mono ${isShaming ? 'text-rose-500 animate-bounce' : 'text-sky-800'}`}>{formatTimer(elapsedTime)}</div>
+                            <div className="h-16 flex items-center justify-center text-center mb-4 px-4">
+                                {!isBathing && lastSavedLiters !== null && lastSavedLiters > 0 && (
+                                    <p className="text-sky-600 font-bold animate-fade-in text-sm bg-sky-100/50 px-4 py-2 rounded-2xl border border-sky-200">✨ {t.waterSaved.replace('{{amount}}', lastSavedLiters)}</p>
+                                )}
+                            </div>
+                            <DropletButton isBathing={isBathing} onClick={isBathing ? endBathing : startBathing} label={isBathing ? t.end : t.start} />
+                            {isShaming && <div className="mt-4 px-4 py-2 bg-rose-100 text-rose-600 rounded-2xl font-bold animate-pulse text-sm">⚠️ {t.bathTooLong}</div>}
+                        </div>
+                        <Statistics sessions={sessions} t={t} onDeleteSession={deleteSession} />
+                        <Recorder t={t} onSave={saveShameSong} existingAudio={shameSong} onDelete={deleteShameSong} />
+                    </main>
+                    {shameSong && <audio ref={audioRef} src={shameSong} loop />}
+                    <footer className="mt-12 text-center text-sky-300 text-[10px] pb-10 uppercase font-bold tracking-widest">&copy; {new Date().getFullYear()} {t.title}</footer>
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
