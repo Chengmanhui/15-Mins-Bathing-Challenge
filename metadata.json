@@ -1,7 +1,0 @@
-{
-  "name": "15 Mins Bathing Challenge",
-  "description": "A fun and effective app to help you reduce bathing time by playing your own recorded singing if you take too long!",
-  "requestFramePermissions": [
-    "microphone"
-  ]
-}
