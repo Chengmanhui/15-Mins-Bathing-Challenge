@@ -32,7 +32,7 @@
 
         .mono { font-family: 'JetBrains Mono', monospace; }
         
-        button:active {
+        button:active, label:active {
             transform: scale(0.97);
             opacity: 0.9;
         }
@@ -186,27 +186,6 @@
         `;
 
         const Recorder = ({ t, onSave, existingAudio, onDelete }) => {
-            const [isRecording, setIsRecording] = useState(false);
-            const [recordingTime, setRecordingTime] = useState(0);
-            const mediaRecorderRef = useRef(null);
-            const chunksRef = useRef([]);
-            const timerRef = useRef(0);
-            const inputRef = useRef(null);
-
-            const getBestMimeType = () => {
-                const types = [
-                    'audio/webm;codecs=opus',
-                    'audio/webm',
-                    'audio/mp4',
-                    'audio/aac',
-                    'audio/ogg;codecs=opus'
-                ];
-                for (const type of types) {
-                    if (window.MediaRecorder && MediaRecorder.isTypeSupported(type)) return type;
-                }
-                return null;
-            };
-
             const handleFileChange = (e) => {
                 const file = e.target.files[0];
                 if (!file) return;
@@ -220,58 +199,6 @@
                 reader.readAsDataURL(file);
             };
 
-            const triggerFallback = () => {
-                // Short alert to notify user of switching mechanism
-                alert("Direct recording restricted. Switching to native recorder...");
-                if (inputRef.current) inputRef.current.click();
-            };
-
-            const startRecording = async () => {
-                // Ensure mediaDevices exists
-                if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-                    triggerFallback();
-                    return;
-                }
-
-                try {
-                    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                    const mime = getBestMimeType();
-                    const options = mime ? { mimeType: mime } : {};
-                    
-                    const mediaRecorder = new MediaRecorder(stream, options);
-                    mediaRecorderRef.current = mediaRecorder;
-                    chunksRef.current = [];
-
-                    mediaRecorder.ondataavailable = (e) => {
-                        if (e.data.size > 0) chunksRef.current.push(e.data);
-                    };
-
-                    mediaRecorder.onstop = () => {
-                        const blob = new Blob(chunksRef.current, { type: mime || 'audio/webm' });
-                        const reader = new FileReader();
-                        reader.readAsDataURL(blob);
-                        reader.onloadend = () => {
-                            if (typeof reader.result === 'string') onSave(reader.result);
-                        };
-                        stream.getTracks().forEach(track => track.stop());
-                    };
-
-                    mediaRecorder.start();
-                    setIsRecording(true);
-                    setRecordingTime(0);
-                    timerRef.current = window.setInterval(() => setRecordingTime(p => p + 1), 1000);
-                } catch (err) {
-                    console.warn("WebRTC recording failed, attempting fallback:", err);
-                    triggerFallback();
-                }
-            };
-
-            const stopRecording = () => {
-                if (mediaRecorderRef.current?.state !== 'inactive') mediaRecorderRef.current?.stop();
-                setIsRecording(false);
-                clearInterval(timerRef.current);
-            };
-
             return html`
                 <div className="bg-white rounded-[2rem] p-6 shadow-sm border border-sky-100 mt-6">
                     <h3 className="text-sky-800 font-bold text-lg mb-2 flex items-center">
@@ -279,16 +206,7 @@
                     </h3>
                     <p className="text-sky-600 text-sm mb-4 leading-relaxed">${t.shameSongDesc}</p>
                     
-                    <input 
-                        type="file" 
-                        accept="audio/*" 
-                        capture="microphone" 
-                        ref=${inputRef} 
-                        onChange=${handleFileChange} 
-                        className="hidden" 
-                    />
-
-                    ${existingAudio && !isRecording && html`
+                    ${existingAudio && html`
                         <div className="mb-4 space-y-3 animate-fade-in">
                             <audio src=${existingAudio} controls className="w-full h-10" />
                             <button onClick=${onDelete} className="text-rose-500 text-xs font-bold hover:underline flex items-center p-2">🗑️ ${t.delete}</button>
@@ -296,20 +214,16 @@
                     `}
                     
                     <div className="flex flex-col items-center">
-                        ${isRecording ? html`
-                            <div className="text-center animate-fade-in">
-                                <div className="text-2xl mono text-rose-500 mb-4 animate-pulse">
-                                    ${Math.floor(recordingTime / 60)}:${(recordingTime % 60).toString().padStart(2, '0')}
-                                </div>
-                                <button onClick=${stopRecording} className="bg-rose-500 text-white px-10 py-3 rounded-2xl font-bold shadow-lg active:bg-rose-600 transition-colors uppercase tracking-widest text-xs">
-                                    ${t.stopRecording}
-                                </button>
-                            </div>
-                        ` : html`
-                            <button onClick=${startRecording} className="bg-sky-50 text-sky-500 px-8 py-3 rounded-2xl font-bold shadow-sm border border-sky-100 flex items-center group active:bg-sky-500 active:text-white transition-colors">
-                                <span className="mr-2">🔴</span> ${t.startSinging}
-                            </button>
-                        `}
+                        <label className="bg-sky-50 text-sky-500 px-8 py-3 rounded-2xl font-bold shadow-sm border border-sky-100 flex items-center group active:bg-sky-500 active:text-white transition-colors cursor-pointer">
+                            <span className="mr-2">🔴</span> ${t.startSinging}
+                            <input 
+                                type="file" 
+                                accept="audio/*" 
+                                capture="microphone" 
+                                onChange=${handleFileChange} 
+                                className="hidden" 
+                            />
+                        </label>
                     </div>
                 </div>
             `;
