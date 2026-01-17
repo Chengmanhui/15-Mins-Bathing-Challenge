@@ -2,45 +2,83 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <meta name="theme-color" content="#f0f9ff">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <title>15 Mins Bathing Challenge</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;600;700&family=JetBrains+Mono:wght@700&display=swap" rel="stylesheet">
     <style>
+        :root {
+            --sat: env(safe-area-inset-top);
+            --sab: env(safe-area-inset-bottom);
+            --sar: env(safe-area-inset-right);
+            --sal: env(safe-area-inset-left);
+        }
+
         body {
             font-family: 'Quicksand', sans-serif;
             background-color: #f0f9ff;
+            /* Native App Feel */
             user-select: none;
+            -webkit-user-select: none;
             -webkit-tap-highlight-color: transparent;
+            touch-action: manipulation;
+            overscroll-behavior: none;
             overflow-x: hidden;
-            overscroll-behavior-y: contain;
+            /* Safe area padding for the whole body to ensure background consistency */
+            padding-left: var(--sal);
+            padding-right: var(--sar);
         }
+
         .mono { font-family: 'JetBrains Mono', monospace; }
+        
+        /* Native-style Button Feedback */
+        button:active {
+            transform: scale(0.97);
+            opacity: 0.9;
+        }
+
         .droplet-shadow { filter: drop-shadow(0 10px 15px rgba(56, 189, 248, 0.3)); }
         .droplet-active { filter: drop-shadow(0 10px 15px rgba(251, 113, 133, 0.4)); }
+        
         @keyframes ripple {
             0% { transform: scale(1); opacity: 1; }
             100% { transform: scale(1.4); opacity: 0; }
         }
+        
         .ripple {
             position: absolute;
             border: 4px solid #38bdf8;
             border-radius: 50%;
             animation: ripple 2s infinite;
         }
+
         .animate-fade-in { animation: fadeIn 0.5s ease-out forwards; }
         @keyframes fadeIn {
             from { opacity: 0; transform: translateY(10px); }
             to { opacity: 1; transform: translateY(0); }
         }
+
         .custom-scroll::-webkit-scrollbar { width: 4px; }
         .custom-scroll::-webkit-scrollbar-track { background: transparent; }
         .custom-scroll::-webkit-scrollbar-thumb { background: #bae6fd; border-radius: 10px; }
         
-        /* Ensure charts display nicely in Android WebView */
         .recharts-responsive-container {
             min-height: 150px;
+        }
+
+        /* Prevent system pull-to-refresh */
+        html, body {
+            height: 100%;
+            position: fixed;
+            width: 100%;
+        }
+        #root {
+            height: 100%;
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
         }
     </style>
     <script type="importmap">
@@ -64,8 +102,6 @@
         import * as Recharts from 'recharts';
 
         const html = htm.bind(React.createElement);
-        
-        // Fix for Recharts potentially exporting via .default or named exports
         const { 
             BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell 
         } = Recharts.default || Recharts;
@@ -126,12 +162,12 @@
         const formatTimer = (ms) => {
             const m = Math.floor(ms / 60000);
             const s = Math.floor((ms % 60000) / 1000);
-            const c = Math.floor((ms % 1000) / 10); // Centiseconds
+            const c = Math.floor((ms % 1000) / 10);
             return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}:${c.toString().padStart(2, '0')}`;
         };
 
         const DropletButton = ({ isBathing, onClick, label }) => html`
-            <button onClick=${onClick} className="relative w-48 h-64 focus:outline-none transition-transform active:scale-95 duration-300 group">
+            <button onClick=${onClick} className="relative w-48 h-64 focus:outline-none transition-all duration-300 group">
                 <div className="absolute inset-0 flex items-center justify-center">
                     <svg viewBox="0 0 100 120" className=${`w-full h-full transition-all duration-500 ${isBathing ? 'fill-rose-400 droplet-active' : 'fill-sky-400 droplet-shadow group-hover:fill-sky-500'}`}>
                         <path d="M50 0 C50 0 10 45 10 75 C10 97 28 115 50 115 C72 115 90 97 90 75 C90 45 50 0 50 0 Z" />
@@ -151,31 +187,58 @@
             const chunksRef = useRef([]);
             const timerRef = useRef(0);
 
+            const getBestMimeType = () => {
+                const types = [
+                    'audio/webm;codecs=opus',
+                    'audio/webm',
+                    'audio/mp4',
+                    'audio/aac',
+                    'audio/ogg;codecs=opus'
+                ];
+                for (const type of types) {
+                    if (MediaRecorder.isTypeSupported(type)) return type;
+                }
+                return null; // Let system decide
+            };
+
             const startRecording = async () => {
-                // Secure context check for microphone API
+                // Secure context check for Android WebView
                 if (!window.isSecureContext && location.protocol !== 'https:' && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
-                    alert("Microphone access requires a secure context (HTTPS). For local testing, use a local server (e.g., localhost). \n錄音功能需要安全環境（HTTPS）。本地測試請使用 localhost 伺服器。");
+                    alert("Microphone access requires a secure context (HTTPS). \n錄音功能需要安全環境 (HTTPS)。");
                     return;
                 }
 
                 try {
                     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                    const mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+                    const options = {};
+                    const mime = getBestMimeType();
+                    if (mime) options.mimeType = mime;
+
+                    const mediaRecorder = new MediaRecorder(stream, options);
                     mediaRecorderRef.current = mediaRecorder;
                     chunksRef.current = [];
-                    mediaRecorder.ondataavailable = (e) => e.data.size > 0 && chunksRef.current.push(e.data);
+
+                    mediaRecorder.ondataavailable = (e) => {
+                        if (e.data.size > 0) chunksRef.current.push(e.data);
+                    };
+
                     mediaRecorder.onstop = () => {
-                        const blob = new Blob(chunksRef.current, { type: 'audio/webm' });
+                        const blob = new Blob(chunksRef.current, { type: mime || 'audio/webm' });
                         const reader = new FileReader();
                         reader.readAsDataURL(blob);
-                        reader.onloadend = () => typeof reader.result === 'string' && onSave(reader.result);
+                        reader.onloadend = () => {
+                            if (typeof reader.result === 'string') onSave(reader.result);
+                        };
                         stream.getTracks().forEach(track => track.stop());
                     };
+
                     mediaRecorder.start();
                     setIsRecording(true);
                     setRecordingTime(0);
                     timerRef.current = window.setInterval(() => setRecordingTime(p => p >= 180 ? (stopRecording(), 180) : p + 1), 1000);
-                } catch (err) { alert("Microphone access denied. Please allow it for recording your singing!"); }
+                } catch (err) { 
+                    alert(`Microphone Error: ${err.name}\n${err.message}\nPlease ensure app permissions are granted.`); 
+                }
             };
 
             const stopRecording = () => {
@@ -193,7 +256,7 @@
                     ${existingAudio && !isRecording && html`
                         <div className="mb-4 space-y-3">
                             <audio src=${existingAudio} controls className="w-full h-10" />
-                            <button onClick=${onDelete} className="text-rose-500 text-xs font-bold hover:underline flex items-center">🗑️ ${t.delete}</button>
+                            <button onClick=${onDelete} className="text-rose-500 text-xs font-bold hover:underline flex items-center p-2">🗑️ ${t.delete}</button>
                         </div>
                     `}
                     <div className="flex flex-col items-center">
@@ -202,13 +265,13 @@
                                 <div className="text-2xl mono text-rose-500 mb-4 animate-pulse">
                                     ${Math.floor(recordingTime / 60)}:${(recordingTime % 60).toString().padStart(2, '0')} / 3:00
                                 </div>
-                                <button onClick=${stopRecording} className="bg-rose-500 text-white px-8 py-3 rounded-2xl font-bold shadow-lg">
+                                <button onClick=${stopRecording} className="bg-rose-500 text-white px-8 py-3 rounded-2xl font-bold shadow-lg active:bg-rose-600 transition-colors">
                                     ${t.stopRecording}
                                 </button>
                             </div>
                         ` : html`
                             <button onClick=${startRecording} className="bg-sky-50 text-sky-500 px-8 py-3 rounded-2xl font-bold shadow-sm border border-sky-100 flex items-center group active:bg-sky-500 active:text-white transition-colors">
-                                <span className="mr-2 group-hover:scale-125 transition">🔴</span> ${t.startRecording}
+                                <span className="mr-2">🔴</span> ${t.startRecording}
                             </button>
                         `}
                     </div>
@@ -263,7 +326,6 @@
                 };
             }, [sessions]);
 
-            // Threshold calculation based on aggregation level
             const alertThreshold = activeTab === 'weekly' ? 15 : (activeTab === 'monthly' ? 150 : 1800);
 
             return html`
@@ -328,7 +390,7 @@
                                         </div>
                                         <button 
                                             onClick=${() => onDeleteSession(s.id)}
-                                            className="p-2 text-rose-300 hover:text-rose-500 transition-colors"
+                                            className="p-3 text-rose-300 active:text-rose-500 transition-colors"
                                         >
                                             🗑️
                                         </button>
@@ -356,23 +418,24 @@
 
             const t = translations[lang];
 
+            // Handle Safe Area and Native Polish
             useEffect(() => {
                 const s = localStorage.getItem('bath_sessions'); if (s) setSessions(JSON.parse(s));
                 setShameSong(localStorage.getItem('shame_song'));
                 const l = localStorage.getItem('app_lang'); if (l === 'en' || l === 'zh') setLang(l);
             }, []);
 
-            const startBathing = () => {
-                // Pre-trigger audio context for mobile if shameSong exists
-                if (shameSong && audioRef.current) {
-                    audioRef.current.muted = true;
-                    audioRef.current.play().then(() => {
-                        audioRef.current.pause();
-                        audioRef.current.muted = false;
-                        audioRef.current.currentTime = 0;
-                    }).catch(console.warn);
-                }
+            // Unlock Audio Context on first interaction
+            const unlockAudio = () => {
+                if (!audioRef.current) return;
+                audioRef.current.play().then(() => {
+                    audioRef.current.pause();
+                    audioRef.current.currentTime = 0;
+                }).catch(() => {});
+            };
 
+            const startBathing = () => {
+                unlockAudio();
                 setIsBathing(true);
                 setElapsedMs(0);
                 setIsShaming(false);
@@ -382,8 +445,6 @@
                 timerRef.current = window.setInterval(() => {
                     const delta = Date.now() - startTimeRef.current;
                     setElapsedMs(delta);
-                    
-                    // Trigger Shame Song only if user stays > 15 mins AND shameSong exists
                     if (delta >= SHAME_THRESHOLD_MS && !isShaming && shameSong) {
                         setIsShaming(true);
                         if (audioRef.current) { 
@@ -396,7 +457,6 @@
 
             const endBathing = () => {
                 clearInterval(timerRef.current);
-                
                 const finalElapsedMs = Math.ceil(elapsedMs / 10) * 10;
                 
                 if (finalElapsedMs > 0) {
@@ -423,36 +483,33 @@
             };
 
             const resetTimer = () => {
-                // Prevent cheating: reset is disabled while bathing
                 if (isBathing) return;
-                
                 setElapsedMs(0);
                 setIsShaming(false);
                 if (audioRef.current) { audioRef.current.pause(); audioRef.current.currentTime = 0; }
             };
 
             return html`
-                <div className="min-h-screen pb-20">
-                    <header className="px-6 pt-12 pb-8 flex justify-between items-center bg-white rounded-b-[3.5rem] shadow-sm border-b border-sky-50">
+                <div className="min-h-screen pb-[calc(2rem+env(safe-area-inset-bottom))] pt-[env(safe-area-inset-top)] flex flex-col">
+                    <header className="px-6 pt-10 pb-8 flex justify-between items-center bg-white rounded-b-[3.5rem] shadow-sm border-b border-sky-50 sticky top-0 z-50">
                         <h1 className="text-2xl font-black text-sky-900 flex items-center tracking-tight">
                             <span className="mr-3 text-3xl">🛁</span> ${t.title}
                         </h1>
-                        <button onClick=${() => { const nl = lang === 'en' ? 'zh' : 'en'; setLang(nl); localStorage.setItem('app_lang', nl); }} className="bg-sky-50 text-sky-600 px-5 py-2 rounded-2xl font-black text-xs border border-sky-100 active:scale-95 transition-transform whitespace-nowrap flex-shrink-0 ml-4">
+                        <button onClick=${() => { const nl = lang === 'en' ? 'zh' : 'en'; setLang(nl); localStorage.setItem('app_lang', nl); }} className="bg-sky-50 text-sky-600 px-5 py-2 rounded-2xl font-black text-xs border border-sky-100 whitespace-nowrap flex-shrink-0 ml-4 active:bg-sky-100 transition-colors">
                             ${t.langToggle}
                         </button>
                     </header>
-                    <main className="px-6 mt-10 max-w-lg mx-auto space-y-10">
+                    <main className="px-6 mt-10 max-w-lg mx-auto space-y-10 w-full flex-grow">
                         <div className="flex flex-col items-center">
                             <button 
                                 onClick=${resetTimer} 
-                                title=${isBathing ? "Disabled while bathing" : "Reset Timer"} 
-                                className=${`mono mb-6 transition-transform ${isBathing ? 'cursor-default opacity-90' : 'active:scale-90'} ${isShaming ? 'text-rose-500 animate-bounce' : 'text-sky-900'}`}
+                                className=${`mono mb-6 transition-all ${isBathing ? 'opacity-90 scale-100' : 'active:scale-90'} ${isShaming ? 'text-rose-500 animate-bounce' : 'text-sky-900'}`}
                             >
                                 <span className="text-6xl font-black tracking-tighter">${formatTimer(elapsedMs)}</span>
                             </button>
                             <div className="h-20 flex items-center justify-center text-center mb-6">
                                 ${!isBathing && lastSavedLiters !== null && lastSavedLiters > 0 && html`
-                                    <div onClick=${() => setLastSavedLiters(null)} className="bg-white/80 backdrop-blur-sm border-2 border-sky-100 p-4 rounded-3xl shadow-xl animate-fade-in flex flex-col items-center cursor-pointer">
+                                    <div onClick=${() => setLastSavedLiters(null)} className="bg-white/80 backdrop-blur-sm border-2 border-sky-100 p-4 rounded-3xl shadow-xl animate-fade-in flex flex-col items-center">
                                         <p className="text-sky-600 font-black text-sm">✨ ${t.waterSaved.replace('{{amount}}', lastSavedLiters.toString())}</p>
                                     </div>
                                 `}
@@ -463,7 +520,7 @@
                         <${Statistics} sessions=${sessions} t=${t} onDeleteSession=${(id) => { const u = sessions.filter(x => x.id !== id); setSessions(u); localStorage.setItem('bath_sessions', JSON.stringify(u)); }} />
                         <${Recorder} t=${t} onSave=${(d) => { setShameSong(d); localStorage.setItem('shame_song', d); }} existingAudio=${shameSong} onDelete=${() => { setShameSong(null); localStorage.removeItem('shame_song'); }} />
                     </main>
-                    ${shameSong && html`<audio ref=${audioRef} src=${shameSong} />`}
+                    ${shameSong && html`<audio ref=${audioRef} src=${shameSong} preload="auto" />`}
                     <footer className="mt-20 text-center text-sky-200 text-[10px] pb-12 font-black uppercase tracking-[0.2em]">© ${new Date().getFullYear()} ${t.title}</footer>
                 </div>
             `;
