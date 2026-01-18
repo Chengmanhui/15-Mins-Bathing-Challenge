@@ -6,6 +6,12 @@
     <meta name="theme-color" content="#f0f9ff">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="15MinBath">
+    
+    <!-- PWA Manifest Embedded as Data URI (Base64) -->
+    <!-- Content: {"name":"15 Mins Bathing Challenge","short_name":"BathChallenge","start_url":".","display":"standalone","background_color":"#f0f9ff","theme_color":"#f0f9ff","description":"A 15-minute bathing timer with a shame song reward.","icons":[{"src":"data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMDAgMTAwIj48cmVjdCB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgZmlsbD0iIzM4YmRmOCIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBkeT0iLjM1ZW0iIGZpbGw9IndoaXRlIiBmb250LWZhbWlseT0iQXJpYWwiIGZvbnQtc2l6ZT0iNDAiIHRleHQtYW5jaG9yPSJtaWRkbGUiPuKAnTwvdGV4dD48L3N2Zz4=","sizes":"512x512","type":"image/svg+xml"}]} -->
+    <link rel="manifest" href="data:application/json;base64,ewogICJuYW1lIjogIjE1IE1pbnMgQmF0aGluZyBDaGFsbGVuZ2UiLAogICJzaG9ydF9uYW1lIjogIkJhdGhDaGFsbGVuZ2UiLAogICJzdGFydF91cmwiOiAiLiIsCiAgImRpc3BsYXkiOiAic3RhbmRhbG9uZSIsCiAgImJhY2tncm91bmRfY29sb3IiOiAiI2YwZjlmZiIsCiAgInRoZW1lX2NvbG9yIjogIiNmMGY5ZmYiLAogICJkZXNjcmlwdGlvbiI6ICJBIDE1LW1pbnV0ZSBiYXRoaW5nIHRpbWVyIHdpdGggYSBzaGFtZSBzb25nIHJld2FyZC4iLAogICJpY29ucyI6IFsKICAgIHsKICAgICAgInNyYyI6ICJkYXRhOmltYWdlL3N2Zyt4bWw7YmFzZTY0LFBIUjJaeUI0Yld4dWN6MGlhSFIwY0RvdkwzZDNkeT01TXpBdlN6SXdNRHd2TWpBd01DOWpkaWRXWW05NFlpQXpNRGdBTVRBd01UQXdJam9pUEhObGNuUXdkR2wwWkQwaU1UQXdJaUJoWldsb2RIUTBJanBNTURBaUlHWnBiR3cwSWpNelpHSmtabTg0SWl2NFBHeDBaWGgwSUhnOUlKVTdNU0lpZVQwaU5UQWxJaUJrZVQwaUxpTXpabVZ0SWlabWxzYkQwaWRzaDBkR1VpSUdadmJuUXRabmF0Wld4NUlEMGlNRElpWm05dWR0TnpZWFpsUHpReElIUmxlSFF0WVc1amFHOXlQU0p0YVdSa2JHVWlQdVpBdzZ3ZHBqNC9MM04yWno0PSIsCiAgICAgICJzaXplcyI6ICI1MTJ4NTEyIiwKICAgICAgInR5cGUiOiAiaW1hZ2Uvc3ZnK3htbCIKICAgIH0KICBdCn0=" />
+
     <title>15 Mins Bathing Challenge</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;600;700&family=JetBrains+Mono:wght@700&display=swap" rel="stylesheet">
@@ -62,9 +68,7 @@
         .custom-scroll::-webkit-scrollbar-track { background: transparent; }
         .custom-scroll::-webkit-scrollbar-thumb { background: #bae6fd; border-radius: 10px; }
         
-        .recharts-responsive-container {
-            min-height: 150px;
-        }
+        .recharts-responsive-container { min-height: 150px; }
 
         html, body {
             height: 100%;
@@ -77,15 +81,10 @@
             -webkit-overflow-scrolling: touch;
         }
         
-        /* Hide scrollbar but keep functionality for tabs */
-        .scrollbar-hide::-webkit-scrollbar {
-            display: none;
-        }
-        .scrollbar-hide {
-            -ms-overflow-style: none;
-            scrollbar-width: none;
-        }
+        .scrollbar-hide::-webkit-scrollbar { display: none; }
+        .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
     </style>
+
     <script type="importmap">
     {
       "imports": {
@@ -100,6 +99,7 @@
 </head>
 <body>
     <div id="root"></div>
+
     <script type="module">
         import React, { useState, useEffect, useRef, useMemo } from 'react';
         import { createRoot } from 'react-dom/client';
@@ -110,6 +110,23 @@
         const { 
             BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell 
         } = Recharts.default || Recharts;
+
+        // PWA SERVICE WORKER REGISTRATION (Inline)
+        if ('serviceWorker' in navigator) {
+            const swCode = `
+                self.addEventListener('install', (event) => {
+                    self.skipWaiting();
+                });
+                self.addEventListener('fetch', (event) => {
+                    event.respondWith(fetch(event.request).catch(() => {
+                        return new Response('Offline: Resource not cached');
+                    }));
+                });
+            `;
+            const blob = new Blob([swCode], { type: 'application/javascript' });
+            const swUrl = URL.createObjectURL(blob);
+            navigator.serviceWorker.register(swUrl).catch(err => console.error('SW Error:', err));
+        }
 
         const SHAME_THRESHOLD_MS = 900000; // 15 minutes
 
@@ -128,7 +145,7 @@
                 bathTooLong: "Bathing too long! Playing your song...",
                 startSinging: "Start Singing",
                 stopRecording: "Stop",
-                processing: "Accessing Mic...",
+                processing: "Starting Mic...",
                 delete: "Delete",
                 noStats: "No records yet.",
                 shameSongDesc: "If you bathe > 15 mins, we play this!",
@@ -138,6 +155,8 @@
                 overtimeCount: "15+ Min",
                 recentHistory: "Recent History",
                 waterSaved: "Congratulations! You saved {{amount}}L of water",
+                permError: "Permission denied. Please enable Microphone permissions in your Android Settings for this App.",
+                apiError: "Microphone recording is not supported on this device/browser.",
             },
             zh: {
                 title: "15 分鐘沖涼挑戰",
@@ -153,7 +172,7 @@
                 bathTooLong: "洗太久了！正在播放你的歌聲...",
                 startSinging: "錄製歌聲",
                 stopRecording: "停止",
-                processing: "請求權限...",
+                processing: "啟動麥克風...",
                 delete: "刪除",
                 noStats: "尚無紀錄。",
                 shameSongDesc: "如果你洗澡超過 15 分鐘，我們會播放這段錄音！",
@@ -163,6 +182,8 @@
                 overtimeCount: "超時次數",
                 recentHistory: "最近紀錄",
                 waterSaved: "恭喜你！你節省了 {{amount}} 公升水",
+                permError: "權限被拒。請在 Android 設定中為此應用程式開啟麥克風權限。",
+                apiError: "此裝置/瀏覽器不支援麥克風錄音。",
             }
         };
 
@@ -194,7 +215,6 @@
             const mediaRecorderRef = useRef(null);
             const chunksRef = useRef([]);
             const timerRef = useRef(null);
-            const permissionTimeoutRef = useRef(null);
             const inputRef = useRef(null);
 
             const handleFileChange = (e) => {
@@ -217,36 +237,16 @@
                 return null;
             };
 
-            const triggerFallback = () => {
-                clearTimeout(permissionTimeoutRef.current);
-                setIsProcessing(false);
-                setIsRecording(false);
-                // Removed capture="microphone" and switching alert as per instructions
-                if (inputRef.current) inputRef.current.click();
-            };
-
             const startSinging = async () => {
                 if (isProcessing || isRecording) return;
-                
                 setIsProcessing(true);
-                
-                // Set race-condition timeout (1.5s). 
-                // Classic Android WebView bug: getUserMedia promise never resolves if onPermissionRequest is missing.
-                permissionTimeoutRef.current = setTimeout(() => {
-                    if (isProcessing) {
-                        console.warn("Permission request timed out in WebView. Triggering fallback picker.");
-                        triggerFallback();
-                    }
-                }, 1500);
 
                 try {
-                    // Check if MediaDevices API is available
                     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-                        throw new Error("API Not Supported");
+                        throw new Error("API_NOT_SUPPORTED");
                     }
 
                     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                    clearTimeout(permissionTimeoutRef.current);
                     
                     const mime = getBestMimeType();
                     const options = mime ? { mimeType: mime } : {};
@@ -275,8 +275,17 @@
                     setRecordingTime(0);
                     timerRef.current = setInterval(() => setRecordingTime(p => p + 1), 1000);
                 } catch (err) {
-                    console.warn("Direct recording failed:", err.name);
-                    triggerFallback();
+                    setIsProcessing(false);
+                    console.error("Recording error:", err);
+                    
+                    if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+                        alert(t.permError);
+                    } else if (err.message === 'API_NOT_SUPPORTED') {
+                        alert(t.apiError);
+                    } else {
+                        // Fallback to hidden file picker for all other cases
+                        if (inputRef.current) inputRef.current.click();
+                    }
                 }
             };
 
@@ -325,7 +334,6 @@
                                 <div className="flex items-center text-sky-400 font-bold animate-pulse">
                                     <span className="mr-2">⌛</span> ${t.processing}
                                 </div>
-                                <p className="text-[10px] text-sky-300 mt-1 uppercase tracking-tighter">Check Android Prompts</p>
                             </div>
                         ` : html`
                             <button onClick=${startSinging} className="bg-sky-50 text-sky-500 px-8 py-3 rounded-2xl font-bold shadow-sm border border-sky-100 flex items-center group active:bg-sky-500 active:text-white transition-colors">
@@ -451,12 +459,7 @@
                                                 ${formatTimer(s.durationMs)}
                                             </span>
                                         </div>
-                                        <button 
-                                            onClick=${() => onDeleteSession(s.id)}
-                                            className="p-3 text-rose-300 active:text-rose-500 transition-colors"
-                                        >
-                                            🗑️
-                                        </button>
+                                        <button onClick=${() => onDeleteSession(s.id)} className="p-3 text-rose-300 active:text-rose-500 transition-colors">🗑️</button>
                                     </div>
                                 `)}
                             </div>
