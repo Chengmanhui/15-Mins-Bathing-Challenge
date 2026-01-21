@@ -8,7 +8,7 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <meta name="apple-mobile-web-app-title" content="15MinBath">
     
-    <!-- PWA Manifest Embedded as Data URI (Base64) - kept original -->
+    <!-- PWA Manifest Embedded as Data URI (Base64) -->
     <link rel="manifest" href="data:application/json;base64,ewogICJuYW1lIjogIjE1IE1pbnMgQmF0aGluZyBDaGFsbGVuZ2UiLAogICJzaG9ydF9uYW1lIjogIkJhdGhDaGFsbGVuZ2UiLAogICJzdGFydF91cmwiOiAiLiIsCiAgImRpc3BsYXkiOiAic3RhbmRhbG9uZSIsCiAgImJhY2tncm91bmRfY29sb3IiOiAiI2YwZjlmZiIsCiAgInRoZW1lX2NvbG9yIjogIiNmMGY5ZmYiLAogICJkZXNjcmlwdGlvbiI6ICJBIDE1LW1pbnV0ZSBiYXRoaW5nIHRpbWVyIHdpdGggYSBzaGFtZSBzb25nIHJld2FyZC4iCiAgImljb25zIjogWwogICAgewogICAgICAic3JjIjogImRhdGE6aW1hZ2Uvc3ZnK3htbDtiYXNlNjQsUEhSMlp5QjRiV3h1Y3owaWFIUjBjRG92TDNkM2R5PTVNekF2U3pJd01Ed3ZNakF3TUM5amRpZFXZtOTRZaUF6TURnQU1UQXdNVEF3SWpvaVBITmxjblF3ZEdsMFpEMGlNVEF3SWlCaFpXbG9kSFEwSWpwTU1EQWlJR1pwYkd3MElqTXpaR0prWm04NElpdjRQR3gwWlhoMElIZzlJSlU3TVNJaWVUMGlOVEFsSWlCa2VUMGlMaU16Wm1WdElpWm1sc2JEMGlkc2gwZEdVaU1HWnZiblF0Wm5hdFpXeDVJRDBpTURJaVptOXVkdE56WVhabFB6UXhJSGRsZUhRdFlXNWphRzl5UFNKdGFXUmtiR1VpUHVZQXc2d2RwajQvTDNOMlp6ND0iLAogICAgICAic2l6ZXMiOiAiNTEyeDUxMiIsCiAgICAgICJ0eXBlIjogImltYWdlL3N2Zyt4bWwiCiAgICB9CiAgXQp9" />
 
     <title>15 Mins Bathing Challenge</title>
@@ -128,6 +128,7 @@
         }
 
         const SHAME_THRESHOLD_MS = 900000; // 15 minutes
+        const MAX_RECOVERY_TIME_MS = 12 * 60 * 60 * 1000; // 12 hours max recovery window
 
         const translations = {
             en: {
@@ -157,6 +158,7 @@
                 permError: "Permission denied. Please enable Microphone permissions in your Android Settings for this App.",
                 apiError: "Microphone recording is not supported on this device/browser.",
                 recordFirst: "Note: Record a song first.",
+                recovered: "Session Recovered",
             },
             zh: {
                 title: "15 分鐘沖涼挑戰",
@@ -185,6 +187,7 @@
                 permError: "權限被拒。請在 Android 設定中為此應用程式開啟麥克風權限。",
                 apiError: "此裝置/瀏覽器不支援麥克風錄音。",
                 recordFirst: "注意：請先錄製歌聲。",
+                recovered: "已恢復上次紀錄",
             }
         };
 
@@ -486,46 +489,117 @@
             const [isShaming, setIsShaming] = useState(false);
             const [lastSavedLiters, setLastSavedLiters] = useState(null);
             const [showWarning, setShowWarning] = useState(false);
+            const [isRecovered, setIsRecovered] = useState(false);
             
             const audioRef = useRef(null);
             const timerRef = useRef(0);
             const startTimeRef = useRef(0);
+            const wakeLockRef = useRef(null);
 
             const t = translations[lang];
 
+            // Initialize and recover state
             useEffect(() => {
                 const s = localStorage.getItem('bath_sessions'); if (s) setSessions(JSON.parse(s));
                 setShameSong(localStorage.getItem('shame_song'));
                 const l = localStorage.getItem('app_lang'); if (l === 'en' || l === 'zh') setLang(l);
+
+                // --- SESSION RECOVERY LOGIC ---
+                const savedStartStr = localStorage.getItem('active_bath_start');
+                if (savedStartStr) {
+                    const savedStart = parseInt(savedStartStr, 10);
+                    const now = Date.now();
+                    
+                    // If the session is recent (e.g., within 12 hours)
+                    if (now - savedStart < MAX_RECOVERY_TIME_MS) {
+                        console.log("Recovering previous session...");
+                        startTimeRef.current = savedStart;
+                        setIsBathing(true);
+                        setIsRecovered(true);
+                        
+                        // Restart timer loop immediately
+                        timerRef.current = window.setInterval(() => {
+                            const delta = Date.now() - startTimeRef.current;
+                            setElapsedMs(delta);
+                            if (delta >= SHAME_THRESHOLD_MS) {
+                                setIsShaming(true); // Will trigger effect below
+                            }
+                        }, 100);
+
+                        // Try to re-acquire locks (might fail if user hasn't interacted, but try anyway)
+                        requestWakeLock();
+                        
+                        // Note: Audio might not play until user clicks something due to browser policy,
+                        // but the UI will be correct.
+                    } else {
+                        // Session too old, discard
+                        localStorage.removeItem('active_bath_start');
+                    }
+                }
             }, []);
 
-            // Handle volume changes based on elapsed time
+            // Helper to Request Wake Lock
+            const requestWakeLock = async () => {
+                try {
+                    if ('wakeLock' in navigator) {
+                        wakeLockRef.current = await navigator.wakeLock.request('screen');
+                        console.log('Wake Lock acquired');
+                    }
+                } catch (err) {
+                    console.error('Wake Lock error:', err);
+                }
+            };
+
+            // Re-acquire wake lock if visibility changes
+            useEffect(() => {
+                const handleVisibilityChange = async () => {
+                    if (document.visibilityState === 'visible' && isBathing) {
+                        await requestWakeLock();
+                        // Attempt to resume audio context if dropped
+                        if (audioRef.current && audioRef.current.paused && audioRef.current.src) {
+                             audioRef.current.play().catch(e => console.log("Auto-resume audio blocked until interaction"));
+                        }
+                    }
+                };
+
+                document.addEventListener('visibilitychange', handleVisibilityChange);
+                return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+            }, [isBathing]);
+
+            // Handle volume changes based on elapsed time and Shaming State
             useEffect(() => {
                 if (!isBathing || !audioRef.current) return;
                 
-                // If we hit the threshold, go full volume
+                // If recovered and audio is paused (due to reload), try to play
+                if (isBathing && audioRef.current.paused) {
+                    audioRef.current.loop = true;
+                    audioRef.current.play().catch(e => console.log("Audio play blocked"));
+                }
+
                 if (elapsedMs >= SHAME_THRESHOLD_MS) {
                      audioRef.current.volume = 1.0;
+                     if (!isShaming) setIsShaming(true);
                 } else {
-                    // Before threshold, keep it essentially silent (Heartbeat)
-                     audioRef.current.volume = 0.01;
+                     audioRef.current.volume = 0.0001;
                 }
             }, [elapsedMs, isBathing]);
 
-            const startBathing = () => {
-                // Mandatory Recording Guard
+            const startBathing = async () => {
                 if (!shameSong) {
                     setShowWarning(true);
                     return;
                 }
                 setShowWarning(false);
+                setIsRecovered(false);
 
-                // Audio Heartbeat Start
+                // Start Audio Heartbeat
                 if (audioRef.current) {
                     audioRef.current.loop = true;
-                    audioRef.current.volume = 0.01; // Silent heartbeat
+                    audioRef.current.volume = 0.0001;
                     audioRef.current.play().catch(console.error);
                 }
+
+                await requestWakeLock();
 
                 setIsBathing(true);
                 setElapsedMs(0);
@@ -533,21 +607,24 @@
                 setLastSavedLiters(null);
                 startTimeRef.current = Date.now();
                 
+                // --- PERSISTENCE: SAVE START TIME ---
+                localStorage.setItem('active_bath_start', startTimeRef.current.toString());
+                
                 timerRef.current = window.setInterval(() => {
                     const delta = Date.now() - startTimeRef.current;
                     setElapsedMs(delta);
-                    
-                    // Logic moved to useEffect for volume control, 
-                    // but we still track Shaming UI state here
                     if (delta >= SHAME_THRESHOLD_MS && !isShaming) {
                         setIsShaming(true);
                     }
-                }, 100); // 100ms is enough resolution and saves battery
+                }, 100); 
             };
 
-            const endBathing = () => {
+            const endBathing = async () => {
                 clearInterval(timerRef.current);
                 const finalElapsedMs = Math.ceil(elapsedMs / 1000) * 1000;
+                
+                // --- PERSISTENCE: CLEAR START TIME ---
+                localStorage.removeItem('active_bath_start');
                 
                 if (finalElapsedMs > 0) {
                     const newSession = { 
@@ -567,19 +644,29 @@
                     }
                 }
                 
+                if (wakeLockRef.current) {
+                    try {
+                        await wakeLockRef.current.release();
+                        wakeLockRef.current = null;
+                    } catch (err) { console.error(err); }
+                }
+
                 setIsBathing(false);
                 setIsShaming(false);
+                setIsRecovered(false);
+                
                 if (audioRef.current) { 
                     audioRef.current.pause(); 
                     audioRef.current.currentTime = 0; 
-                    audioRef.current.volume = 1.0; // Reset for previewing
+                    audioRef.current.volume = 1.0; 
                 }
             };
 
-            const resetTimer = () => {
+            const resetTimer = async () => {
                 if (isBathing) return;
                 setElapsedMs(0);
                 setIsShaming(false);
+                localStorage.removeItem('active_bath_start'); // Also clear persistence on reset
                 if (audioRef.current) { audioRef.current.pause(); audioRef.current.currentTime = 0; }
             };
 
@@ -602,7 +689,7 @@
                                 <span className="text-[13vw] font-black tracking-tighter leading-none">${formatTimer(elapsedMs)}</span>
                             </button>
                             
-                            <div className="h-20 flex items-center justify-center text-center mb-6 w-full">
+                            <div className="h-20 flex items-center justify-center text-center mb-6 w-full relative">
                                 ${!isBathing && lastSavedLiters !== null && lastSavedLiters > 0 && html`
                                     <div onClick=${() => setLastSavedLiters(null)} className="bg-white/80 backdrop-blur-sm border-2 border-sky-100 p-4 rounded-3xl shadow-xl animate-fade-in flex flex-col items-center cursor-pointer">
                                         <p className="text-sky-600 font-black text-sm">✨ ${t.waterSaved.replace('{{amount}}', lastSavedLiters.toString())}</p>
@@ -617,6 +704,12 @@
                                     >
                                         <span className="text-xl mr-3">🎙️</span>
                                         ${t.recordFirst}
+                                    </div>
+                                `}
+
+                                ${isRecovered && isBathing && html`
+                                    <div className="absolute top-0 text-[10px] bg-sky-100 text-sky-600 px-3 py-1 rounded-full font-bold uppercase tracking-wide animate-fade-in">
+                                        ${t.recovered}
                                     </div>
                                 `}
                             </div>
