@@ -641,7 +641,17 @@
                         />
                     </main>
                     ${shameSong && html`<audio ref=${audioRef} src=${shameSong} preload="auto" />`}
-                    <footer className="mt-20 text-center text-sky-200 text-[10px] pb-12 font-black uppercase tracking-[0.2em]">© ${new Date().getFullYear()} ${t.title}</footer>
+                    <footer className="mt-20 text-center text-sky-200 text-[10px] pb-12 font-black uppercase tracking-[0.2em] flex flex-col items-center gap-3">
+    <span>© {new Date().getFullYear()} {t.title}</span>
+    <a
+        href="https://sites.google.com/view/15mins-bathing-privacy/%E4%BD%8F%E5%AE%85"
+        target="_blank"
+        rel="noreferrer"
+        className="hover:text-sky-400 transition-colors border-b border-transparent hover:border-sky-400 pb-0.5"
+    >
+        {lang === 'en' ? 'Privacy Policy' : '私隱權政策'}
+    </a>
+</footer>
                 </div>
             `;
         }
