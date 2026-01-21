@@ -8,7 +8,7 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <meta name="apple-mobile-web-app-title" content="15MinBath">
     
-    <!-- PWA Manifest Embedded as Data URI (Base64) -->
+    <!-- PWA Manifest -->
     <link rel="manifest" href="data:application/json;base64,ewogICJuYW1lIjogIjE1IE1pbnMgQmF0aGluZyBDaGFsbGVuZ2UiLAogICJzaG9ydF9uYW1lIjogIkJhdGhDaGFsbGVuZ2UiLAogICJzdGFydF91cmwiOiAiLiIsCiAgImRpc3BsYXkiOiAic3RhbmRhbG9uZSIsCiAgImJhY2tncm91bmRfY29sb3IiOiAiI2YwZjlmZiIsCiAgInRoZW1lX2NvbG9yIjogIiNmMGY5ZmYiLAogICJkZXNjcmlwdGlvbiI6ICJBIDE1LW1pbnV0ZSBiYXRoaW5nIHRpbWVyIHdpdGggYSBzaGFtZSBzb25nIHJld2FyZC4iCiAgImljb25zIjogWwogICAgewogICAgICAic3JjIjogImRhdGE6aW1hZ2Uvc3ZnK3htbDtiYXNlNjQsUEhSMlp5QjRiV3h1Y3owaWFIUjBjRG92TDNkM2R5PTVNekF2U3pJd01Ed3ZNakF3TUM5amRpZFXZtOTRZaUF6TURnQU1UQXdNVEF3SWpvaVBITmxjblF3ZEdsMFpEMGlNVEF3SWlCaFpXbG9kSFEwSWpwTU1EQWlJR1pwYkd3MElqTXpaR0prWm04NElpdjRQR3gwWlhoMElIZzlJSlU3TVNJaWVUMGlOVEFsSWlCa2VUMGlMaU16Wm1WdElpWm1sc2JEMGlkc2gwZEdVaU1HWnZiblF0Wm5hdFpXeDVJRDBpTURJaVptOXVkdE56WVhabFB6UXhJSGRsZUhRdFlXNWphRzl5UFNKdGFXUmtiR1VpUHVZQXc2d2RwajQvTDNOMlp6ND0iLAogICAgICAic2l6ZXMiOiAiNTEyeDUxMiIsCiAgICAgICJ0eXBlIjogImltYWdlL3N2Zyt4bWwiCiAgICB9CiAgXQp9" />
 
     <title>15 Mins Bathing Challenge</title>
@@ -110,7 +110,11 @@
             BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell 
         } = Recharts.default || Recharts;
 
-        // PWA SERVICE WORKER REGISTRATION (Inline)
+        // --- FIX: NoSleep Video Source (Tiny silent mp4 loop) ---
+        // 這是關鍵修正：一段極細嘅無聲影片，用黎保持瀏覽器引擎活躍
+        const NO_SLEEP_VIDEO_SRC = "data:video/mp4;base64,AAAAIGZ0eXBpc29tAAACAGlzb21pc28yYXZjMW1wNDEAAAAIZnJlZQAAAs7tZGF0AAACrwYF//+l3AiAAAADbW9vdgAAAGxtdmhkAAAAAHs5uZC7ObmQAAACWAAAAAYAAQAAAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAgAAAzF0cmFrAAAAXHRraGQAAAADezm5kLs5uZAAAAABAAAAAAAAAAYAAAAAAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQAAAAEAAAAAACRlZHRzAAAAHGVsc3QAAAAAAAAAAQAAAgYAAAAAAQAAAAAAZmd3aHAAAAAibWRpYQAAACBtZGhkAAAAAHs5uZC7ObmQAAACWAAAAAYX1AAAAAAALWhkbHIAAAAAAAAAAHZpZGUAAAAAAAAAAAAAAABVaWRlb0hhbmRsZXIAAAACZW1pbmYAAAAUdm1oZAAAAAEAAAAAAAAAAAAAACRkaW5mAAAAHGRyZWYAAAAAAAAAAQAAAAx1cmwgAAAAAQAAAhNzdGJsAAAAp3N0c2QAAAAAAAAAAQAAAJ9hdmMxAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAAEABAAAAAAACAAIAgICAP9//wAAAB5hdmNDQVZDMQEA/wAAAAA2Z2QAAKqqAuN4CBAAAAACae4gAAADaIznQUOGQAAAAAAZcHBzAgIGhAAAAABhZ2QAAAAAAAAAAAAYcGFzcAAAAAEAAAABAAAABmNvbHIAAAAAAQAAbXAzNGEAAAA1ZXNkcwAAAAOAgIAiAAAABICAgBEAAAAAAAAAAAAAAgQAAAAABIECAAOEgICABAAAAoCAgAAACHN0dHMAAAAAAAAAAQAAAAIAAAAEc3RzYwAAAAAAAAABAAAAAQAAAAIAAAABc3RszgAAAAAAAAACAAAAIHN0Y28AAAAAAAAAAQAAAq8AAAA4c3RzcwAAAAAAAAABAAAAAQAAABxjdHRzAAAAAAAAAAEAAAACAAAAAQAAAAE=";
+
+        // PWA SERVICE WORKER
         if ('serviceWorker' in navigator) {
             const swCode = `
                 self.addEventListener('install', (event) => {
@@ -128,7 +132,7 @@
         }
 
         const SHAME_THRESHOLD_MS = 900000; // 15 minutes
-        const MAX_RECOVERY_TIME_MS = 12 * 60 * 60 * 1000; // 12 hours max recovery window
+        const MAX_RECOVERY_TIME_MS = 12 * 60 * 60 * 1000; // 12 hours
 
         const translations = {
             en: {
@@ -155,10 +159,11 @@
                 overtimeCount: "15+ Min",
                 recentHistory: "Recent History",
                 waterSaved: "Congratulations! You saved {{amount}}L of water",
-                permError: "Permission denied. Please enable Microphone permissions in your Android Settings for this App.",
-                apiError: "Microphone recording is not supported on this device/browser.",
+                permError: "Permission denied. Enable Mic permissions in Settings.",
+                apiError: "Microphone recording is not supported on this device.",
                 recordFirst: "Note: Record a song first.",
                 recovered: "Session Recovered",
+                enableNotif: "Please enable Notifications for better timer reliability.",
             },
             zh: {
                 title: "15 分鐘沖涼挑戰",
@@ -188,6 +193,7 @@
                 apiError: "此裝置/瀏覽器不支援麥克風錄音。",
                 recordFirst: "注意：請先錄製歌聲。",
                 recovered: "已恢復上次紀錄",
+                enableNotif: "請允許通知權限以確保計時器準確。",
             }
         };
 
@@ -248,7 +254,7 @@
             };
 
             const startSinging = async () => {
-                onStartRecording(); // Clear warnings
+                onStartRecording();
                 if (isProcessing || isRecording) return;
                 setIsProcessing(true);
 
@@ -294,7 +300,6 @@
                     } else if (err.message === 'API_NOT_SUPPORTED') {
                         alert(t.apiError);
                     } else {
-                        // Fallback to hidden file picker
                         if (inputRef.current) inputRef.current.click();
                     }
                 }
@@ -315,13 +320,7 @@
                     </h3>
                     <p className="text-sky-600 text-sm mb-4 leading-relaxed">${t.shameSongDesc}</p>
                     
-                    <input 
-                        type="file" 
-                        accept="audio/*" 
-                        ref=${inputRef}
-                        onChange=${handleFileChange} 
-                        className="hidden" 
-                    />
+                    <input type="file" accept="audio/*" ref=${inputRef} onChange=${handleFileChange} className="hidden" />
 
                     ${existingAudio && !isRecording && !isProcessing && html`
                         <div className="mb-4 space-y-3 animate-fade-in">
@@ -491,12 +490,33 @@
             const [showWarning, setShowWarning] = useState(false);
             const [isRecovered, setIsRecovered] = useState(false);
             
+            // Refs
             const audioRef = useRef(null);
+            const videoRef = useRef(null); // Reference for the hidden video
             const timerRef = useRef(0);
             const startTimeRef = useRef(0);
             const wakeLockRef = useRef(null);
 
             const t = translations[lang];
+
+            // Request Notification Permission
+            const requestNotificationPermission = async () => {
+                if ("Notification" in window && Notification.permission !== "granted") {
+                    await Notification.requestPermission();
+                }
+            };
+
+            const triggerNotification = () => {
+                if ("Notification" in window && Notification.permission === "granted") {
+                    try {
+                        new Notification(t.bathTooLong, {
+                            body: t.shameSongDesc,
+                            icon: "/icon.png",
+                            vibrate: [200, 100, 200]
+                        });
+                    } catch (e) { console.error("Notif error", e); }
+                }
+            };
 
             // Initialize and recover state
             useEffect(() => {
@@ -504,60 +524,54 @@
                 setShameSong(localStorage.getItem('shame_song'));
                 const l = localStorage.getItem('app_lang'); if (l === 'en' || l === 'zh') setLang(l);
 
-                // --- SESSION RECOVERY LOGIC ---
                 const savedStartStr = localStorage.getItem('active_bath_start');
                 if (savedStartStr) {
                     const savedStart = parseInt(savedStartStr, 10);
                     const now = Date.now();
                     
-                    // If the session is recent (e.g., within 12 hours)
                     if (now - savedStart < MAX_RECOVERY_TIME_MS) {
                         console.log("Recovering previous session...");
                         startTimeRef.current = savedStart;
                         setIsBathing(true);
                         setIsRecovered(true);
                         
-                        // Restart timer loop immediately
+                        // Resume timer
                         timerRef.current = window.setInterval(() => {
                             const delta = Date.now() - startTimeRef.current;
                             setElapsedMs(delta);
                             if (delta >= SHAME_THRESHOLD_MS) {
-                                setIsShaming(true); // Will trigger effect below
+                                setIsShaming(true);
                             }
                         }, 100);
 
-                        // Try to re-acquire locks (might fail if user hasn't interacted, but try anyway)
                         requestWakeLock();
-                        
-                        // Note: Audio might not play until user clicks something due to browser policy,
-                        // but the UI will be correct.
                     } else {
-                        // Session too old, discard
                         localStorage.removeItem('active_bath_start');
                     }
                 }
             }, []);
 
-            // Helper to Request Wake Lock
             const requestWakeLock = async () => {
                 try {
                     if ('wakeLock' in navigator) {
                         wakeLockRef.current = await navigator.wakeLock.request('screen');
-                        console.log('Wake Lock acquired');
                     }
                 } catch (err) {
                     console.error('Wake Lock error:', err);
                 }
             };
 
-            // Re-acquire wake lock if visibility changes
+            // Re-acquire wake lock AND resume video if visibility changes
             useEffect(() => {
                 const handleVisibilityChange = async () => {
                     if (document.visibilityState === 'visible' && isBathing) {
                         await requestWakeLock();
-                        // Attempt to resume audio context if dropped
+                        // Resume audio/video if they were paused by system
                         if (audioRef.current && audioRef.current.paused && audioRef.current.src) {
-                             audioRef.current.play().catch(e => console.log("Auto-resume audio blocked until interaction"));
+                             audioRef.current.play().catch(e => console.log("Auto-resume audio blocked"));
+                        }
+                        if (videoRef.current && videoRef.current.paused) {
+                             videoRef.current.play().catch(e => console.log("Auto-resume video blocked"));
                         }
                     }
                 };
@@ -566,23 +580,26 @@
                 return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
             }, [isBathing]);
 
-            // Handle volume changes based on elapsed time and Shaming State
+            // Audio Logic & Notification Trigger
             useEffect(() => {
                 if (!isBathing || !audioRef.current) return;
                 
-                // If recovered and audio is paused (due to reload), try to play
-                if (isBathing && audioRef.current.paused) {
+                // Keep audio active but silent until threshold
+                if (audioRef.current.paused) {
                     audioRef.current.loop = true;
                     audioRef.current.play().catch(e => console.log("Audio play blocked"));
                 }
 
                 if (elapsedMs >= SHAME_THRESHOLD_MS) {
                      audioRef.current.volume = 1.0;
-                     if (!isShaming) setIsShaming(true);
+                     if (!isShaming) {
+                        setIsShaming(true);
+                        triggerNotification(); // Trigger system notification
+                     }
                 } else {
-                     audioRef.current.volume = 0.0001;
+                     audioRef.current.volume = 0.0001; // Keep virtually silent
                 }
-            }, [elapsedMs, isBathing]);
+            }, [elapsedMs, isBathing, isShaming]);
 
             const startBathing = async () => {
                 if (!shameSong) {
@@ -591,6 +608,13 @@
                 }
                 setShowWarning(false);
                 setIsRecovered(false);
+                
+                await requestNotificationPermission();
+
+                // Start Video Heartbeat (The "NoSleep" Trick)
+                if (videoRef.current) {
+                    videoRef.current.play().catch(console.error);
+                }
 
                 // Start Audio Heartbeat
                 if (audioRef.current) {
@@ -607,7 +631,6 @@
                 setLastSavedLiters(null);
                 startTimeRef.current = Date.now();
                 
-                // --- PERSISTENCE: SAVE START TIME ---
                 localStorage.setItem('active_bath_start', startTimeRef.current.toString());
                 
                 timerRef.current = window.setInterval(() => {
@@ -623,7 +646,6 @@
                 clearInterval(timerRef.current);
                 const finalElapsedMs = Math.ceil(elapsedMs / 1000) * 1000;
                 
-                // --- PERSISTENCE: CLEAR START TIME ---
                 localStorage.removeItem('active_bath_start');
                 
                 if (finalElapsedMs > 0) {
@@ -655,10 +677,14 @@
                 setIsShaming(false);
                 setIsRecovered(false);
                 
+                // Reset media
                 if (audioRef.current) { 
                     audioRef.current.pause(); 
                     audioRef.current.currentTime = 0; 
                     audioRef.current.volume = 1.0; 
+                }
+                if (videoRef.current) {
+                    videoRef.current.pause();
                 }
             };
 
@@ -666,7 +692,7 @@
                 if (isBathing) return;
                 setElapsedMs(0);
                 setIsShaming(false);
-                localStorage.removeItem('active_bath_start'); // Also clear persistence on reset
+                localStorage.removeItem('active_bath_start');
                 if (audioRef.current) { audioRef.current.pause(); audioRef.current.currentTime = 0; }
             };
 
@@ -733,20 +759,24 @@
                             onStartRecording=${() => setShowWarning(false)}
                         />
                     </main>
-                    ${shameSong && html`<audio ref=${audioRef} src=${shameSong} preload="auto" />`}
+                    
+                    <!-- 隱形影片 & 音頻組件 (NoSleep 核心) -->
+                    ${shameSong && html`<audio ref=${audioRef} src=${shameSong} preload="auto" playsInline />`}
+                    <video 
+                        ref=${videoRef} 
+                        src=${NO_SLEEP_VIDEO_SRC} 
+                        playsInline 
+                        muted 
+                        loop 
+                        style=${{ position: 'absolute', opacity: 0, pointerEvents: 'none', width: '1px', height: '1px' }} 
+                    />
+
                     <footer className="mt-20 flex flex-col items-center gap-3 pb-12 text-center text-[10px] font-black tracking-[0.2em] text-sky-200">
-        <span>
-        © 2026 15 Mins Bathing Challenge
-    </span>
-    <a
-        href="https://sites.google.com/view/15mins-bathing-privacy/%E4%BD%8F%E5%AE%85"
-        target="_blank"
-        rel="noreferrer"
-        className="border-b border-transparent pb-0.5 transition-colors hover:border-sky-400 hover:text-sky-400"
-    >
-       Privacy Policy / 私隱權政策
-    </a>
-</footer>
+                        <span>© 2026 15 Mins Bathing Challenge</span>
+                        <a href="https://sites.google.com/view/15mins-bathing-privacy/%E4%BD%8F%E5%AE%85" target="_blank" rel="noreferrer" className="border-b border-transparent pb-0.5 transition-colors hover:border-sky-400 hover:text-sky-400">
+                           Privacy Policy / 私隱權政策
+                        </a>
+                    </footer>
                 </div>
             `;
         }
